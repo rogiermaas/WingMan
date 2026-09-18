@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WingMan — Fly together</title><link rel="icon" href="WingMan.ico">
+<style>body{font:18px/1.6 system-ui,sans-serif;max-width:760px;margin:8vh auto;padding:24px;color:#eaf0fa;background:#101b2c}h1{font-size:56px;line-height:1.1;margin-bottom:0}h2{font-size:24px;margin-top:40px}a{color:#9bd6ff}.download{display:inline-block;background:#9bd6ff;color:#101b2c;text-decoration:none;padding:14px 24px;border-radius:8px;font-weight:650}li{margin-bottom:10px}small{color:#b8c5d8}</style>
+<main><img src="wingman-logo-concept.png" alt="WingMan" style="width:360px;max-width:100%;height:auto;border-radius:8px"><p>Fly together.</p>
+<p>Lead a formation, follow another pilot, or do both. Choose your distance behind, beside and above the lead aircraft.</p>
+<p><a class="download" href="WingMan.msi">Download WingMan for Windows</a><br><small>Current version: <strong id="current-version">1.1.6</strong></small></p>
+<p><a href="WingMan-source.zip">Download source code</a> · <a href="LICENSE.txt">GNU GPL v3</a></p>
+<small>Windows 10/11, 64-bit · Microsoft Flight Simulator 2024 · Preview release</small>
+<h2>Your first formation</h2><ol><li>Install WingMan and load your flight in MSFS 2024.</li><li>Enter your pilot name once and click OK. WingMan connects automatically to MSFS and the relay; no formation code is needed.</li><li>Enable <strong>Followable</strong> to appear in the pilot list.</li><li>Select an aircraft marked <strong>Live</strong>, set your spacing, and switch <strong>Follow user</strong> on. Pale green rows are WingMan aircraft; light grey rows are MSFS-only traffic.</li></ol>
+<p>For reliable shared telemetry, each participating pilot runs WingMan. <strong>Search MSFS aircraft</strong> also lists local simulator contacts and visible player labels. Simulator-only aircraft can be followed when MSFS supplies a fresh position; <strong>Name only</strong> entries cannot yet be followed.</p>
+<p>You control the aircraft’s autopilot master and autothrottle. WingMan updates the selected speed, heading and altitude outputs. For a 5 NM air train, each pilot follows the pilot immediately ahead. To circle a grounded WingMan lead, set a positive <strong>Above NM</strong> offset; Behind becomes the circle radius. Your own aircraft must be airborne.</p>
+<p>The app checks for updates every five minutes. Automatic updates can be switched off; manual checking remains available.</p>
+<p><strong>Automatic setup:</strong> WingMan finds an existing compatible SimConnect runtime or downloads and verifies it automatically. No full SDK installation is needed. The Microsoft runtime retains its <a href="runtime/msfs2024-1.7.3/MSFS%20SDK%20EULA.pdf">SDK licence</a>.</p>
+<p><small>Pilot names are supplied by pilots; they are not verified Xbox identities. Followable pilots share positions with nearby WingMan pilots and their followers. Unfollowable pilots send their position only to the relay for nearby discovery. The relay does not save telemetry to disk.</small></p></main></html>

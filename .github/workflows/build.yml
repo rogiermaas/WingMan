@@ -1,0 +1,69 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-and-relay:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: relay/go.sum
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install wix --version 4.0.6 --tool-path artifacts/toolchain/wix
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed' }
+          & ./artifacts/toolchain/wix/wix.exe extension add WixToolset.UI.wixext/4.0.6
+          if ($LASTEXITCODE -ne 0) { throw 'WiX UI extension installation failed' }
+      - name: Build Windows installer and Linux relay; test relay
+        shell: pwsh
+        run: ./build-wingman.ps1 -SkipPublish
+      - name: Test the published Windows executable without MSFS
+        shell: pwsh
+        env:
+          WINGMAN_TEST_PROFILE: github-ci
+        run: |
+          $testRun = Start-Process -FilePath ./dist/WingMan/WingMan.exe -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru
+          Get-ChildItem ./dist/WingMan/logs/*.jsonl | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Get-Content -Tail 4
+          if ($testRun.ExitCode -ne 0) { throw "WingMan tests failed: $($testRun.ExitCode)" }
+      - name: Retain test logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-logs
+          path: dist/WingMan/logs/*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Retain unsigned build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wingman-unsigned-build
+          path: |
+            dist/WingMan/WingMan.exe
+            dist/WingMan.msi
+            dist/wingman-server/web/WingMan-source.zip
+            dist/WingMan-server-almalinux8-x64.tar.gz
+            dist/WingMan-server-almalinux8-x64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30

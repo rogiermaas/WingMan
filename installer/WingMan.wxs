@@ -1,0 +1,52 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="WingMan" Manufacturer="Rogier Maas" Version="$(var.Version)" UpgradeCode="F247EA02-7BCA-4D70-AB46-759ED8C37376" Scope="perUser" Language="1033">
+    <MajorUpgrade DowngradeErrorMessage="A newer WingMan installer is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="ARPURLINFOABOUT" Value="https://wingman.rogiermaas.nl/" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Icon Id="WingManIcon" SourceFile="assets\branding\WingMan.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WingManIcon" />
+    <Property Id="WINGMAN_OS_BUILD">
+      <RegistrySearch Id="WindowsBuildSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR (VersionNT64 AND WINGMAN_OS_BUILD &gt;= 17763)" Message="WingMan requires 64-bit Windows 10 (1809 or later) or Windows 11." />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="WingMan">
+          <Component Id="Application" Guid="E7DD6D65-6FCA-4674-A526-02DC9B40F4F8">
+            <File Id="WingManExe" Source="$(var.PublishDir)\WingMan.exe" />
+            <File Source="$(var.PublishDir)\README.md" />
+            <File Source="LICENSE.txt" />
+            <File Source="THIRD-PARTY-NOTICES.md" />
+            <File Source="licenses\DOTNET-LICENSE.txt" />
+            <File Source="licenses\DOTNET-THIRD-PARTY-NOTICES.txt" />
+            <RegistryValue Root="HKCU" Key="Software\WingMan" Name="InstallFolder" Value="[INSTALLFOLDER]" Type="string" KeyPath="yes" />
+            <RemoveFile Id="OldUpdateBackup" Name="WingMan.exe.previous" On="uninstall" />
+            <RemoveFile Id="OldUpdateStage" Name="WingMan.exe.new" On="uninstall" />
+            <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="WingManMenu" Name="WingMan">
+        <Component Id="StartMenu" Guid="B7DB282C-68FC-4543-BB51-6F130E55B86C">
+          <Shortcut Id="StartWingMan" Name="WingMan" Target="[INSTALLFOLDER]WingMan.exe" WorkingDirectory="INSTALLFOLDER" Advertise="no" Icon="WingManIcon" />
+          <RemoveFolder Id="RemoveWingManMenu" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\WingMan" Name="StartMenuInstalled" Value="1" Type="integer" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="36395443-C70F-4F25-A963-D04B0BE283AC">
+        <Shortcut Id="DesktopWingMan" Name="WingMan" Target="[INSTALLFOLDER]WingMan.exe" WorkingDirectory="INSTALLFOLDER" Advertise="no" Icon="WingManIcon" />
+        <RegistryValue Root="HKCU" Key="Software\WingMan" Name="DesktopShortcutInstalled" Value="1" Type="integer" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <Feature Id="Main" Title="WingMan" Level="1">
+      <ComponentRef Id="Application" /><ComponentRef Id="StartMenu" /><ComponentRef Id="DesktopShortcut" />
+    </Feature>
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\License.rtf" />
+  </Package>
+</Wix>

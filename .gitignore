@@ -1,0 +1,23 @@
+**/bin/
+**/obj/
+dist/
+logs/
+artifacts/
+.vs/
+/.wix/
+**/__pycache__/
+**/node_modules/
+*.jsonl
+*.pfx
+*.p12
+*.key
+*.pem
+!src/EscortPlane2024/update-public.pem
+.env
+.env.*
+# Private operator records, application drafts and machine-specific publishing tools.
+/docs/signpath/
+/docs/FREE-CODE-SIGNING.md
+/docs/WINGMAN-LIVE-DEPLOYMENT.md
+/tools/publish-final.py
+/tools/publish-update-test.py

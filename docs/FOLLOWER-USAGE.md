@@ -1,0 +1,68 @@
+# Escort Plane 2024: following controls
+
+Launch `dist/EscortPlane2024/EscortPlane2024.exe` with a flight loaded. The app connects and starts both native aircraft-ID position scans and map traffic queries automatically. It never engages aircraft control at startup. The map traffic bridge requires the local MSFS SDK Coherent debugger (port 19999) and an active HTML cockpit instrument or logic view. Direct SimConnect aircraft scans work independently of that bridge.
+
+## Choose, follow, change target
+
+1. Choose **Range NM** and **Min ft MSL** on the Traffic map. The default altitude cutoff is 1,000 feet above sea level; zero shows all heights. The four rings divide the chosen range into quarters. North is up, your aircraft is at the center, and the mouse wheel changes range. Altitude filtering only changes what is displayed; it does not change an active follow target.
+2. Set behind distance, lateral offset and vertical offset. Every offset uses **0.1 NM** steps. Positive lateral is right of the target's direction of travel; negative is left. Positive vertical is above; negative is below. **0.1 NM vertically is 607.6 feet**, not 100 feet. The MCP altitude selector rounds to its 100-foot increment.
+3. Review IAS minimum/maximum, maximum Mach and maximum vertical speed for your aircraft. Defaults are starting limits, not a computed aircraft performance envelope.
+4. Choose speed, heading and/or altitude updates. Click a fresh map ID, double-click its row in **All IDs**, or use **Follow selected aircraft**. This locks the source and ID, collects motion samples and starts following when telemetry and aircraft readback are ready. Names are optional and can change without replacing that ID. Preparation expires after 30 seconds if readiness conditions are not met. The name search remains available in All IDs; **Start following** starts the chosen outputs when ready.
+5. **Stop following**, or Escape while this window is focused, immediately stops commands and refreshes the nearby list. Your autopilot keeps its last settings. Select another aircraft to repeat. The old aircraft is never silently replaced by another traffic ID.
+6. **Find nearby aircraft** starts live aircraft discovery and position updates. While running, this button becomes **Pause aircraft updates**, which pauses those updates and stops following. Hover over a button for an explanation.
+
+Change spacing, offsets, smoothing and valid limits while following: the next control cycle applies them without stopping. Invalid limits leave the last valid settings active and show a message. Unchecking an output stops commands only on that axis; turning off all outputs ends control. The usual stale-data and aircraft-readiness checks still apply.
+
+Click any column heading in **Visible names** or **All IDs** to sort; click it again to reverse the order. An arrow shows the direction. Distances and altitudes sort numerically, with displayed distance units converted for comparison. Missing numeric values stay last. Your chosen sort remains applied as data updates.
+
+**S123** means SimConnect aircraft object 123; **T123** means map traffic ID 123. These are unrelated IDs and are never merged by matching numbers. Blue markers are native aircraft objects, green markers are map traffic, gold is your selection, and gray means an old position. Hover for model/name information. Crowded labels use leader lines; zoom in or use All IDs when a cluster is too dense. Contacts may be parked, AI or multiplayer; a name, model or ID alone does not establish that classification.
+
+IDs with missing, zero or invalid coordinates appear in All IDs with an explanation. They cannot be placed on the map or followed. Unknown altitude does not make an ID pass the flight-readiness checks. Native position polling checks up to 64 aircraft per second and prioritizes the selected target. A target needs fresh, consistent movement above 40 kt before following can start. Saved IDs are not reacquired after restarting because MSFS can reuse them.
+
+Opening the app again brings the existing window forward, so two windows cannot compete for its traffic connection. Visible in-sim player labels still do not guarantee usable tracking positions. The additional native source can display ordinary aircraft that are missing from the map feed, but it does not bypass missing multiplayer coordinates.
+
+## Visible names when the map is empty
+
+Open **Visible names** using its tab or the button above the map. The app reads MSFS's loaded HUD nameplates through the SDK debugger once per second. It displays the player name, aircraft model, and the distance and altitude text supplied by MSFS. This worked with the current PMDG aircraft while both position sources were missing the visible players; changing aircraft is not required for this fallback.
+
+These rows are independent of the map's range and altitude filters. Distances and altitudes retain the simulator's display units and formatting. A fresh label read does not establish that its underlying multiplayer update is fresh. Labels provide no bearing, geographic position or aircraft Object ID, and their internal UI identifiers are not tracking IDs. They therefore cannot be plotted or followed.
+
+Rows turn **green** and say **Live position** when an exact, case-insensitive name matches one fresh geographic position. Green indicates coordinates, not autopilot readiness: motion must still be acquired and aircraft conditions checked. Select a green row and click **Follow selected name** (or double-click it). Following starts once those checks pass. If several live IDs have the same name, use the map or All IDs to choose explicitly.
+
+**Watch selected name** stops current following and waits for the selected name's position, including native SimConnect positions. Watching never engages control. A fix becomes unavailable after two seconds without a fresh position. **Updates stopped** means a previously received fix is no longer being updated; hover for its age. **Filtering motion** means fresh positions are arriving but the chosen target's motion filter detected a freeze or jump. **No position** means no usable fix has been seen for the current row. Label distance and altitude alone cannot locate a map point. Position-feed names also appear if the HUD label is missing. The map shows names where supplied, otherwise IDs. Grey navigation tabs distinguish the views.
+
+The window refreshes once per second with buffered drawing. Lists retain their existing rows and update changed cells; they are not cleared and rebuilt. An active sort is reapplied only when values require a different order. This display rate does not slow traffic acquisition or autopilot control. Ground/airborne flags and the map altitude cutoff do not filter the Visible names position fixes.
+
+**Keep on top** sets the native Windows topmost flag. It and formation settings persist between launches. Normal tracking does not change the simulator camera.
+
+## Autopilot behavior
+
+The app updates selected values. You operate AP master, autothrottle arm and heading/speed hold modes. Aircraft without autothrottle cannot acquire throttle control merely because the app writes a speed selector; some stock aircraft use selected speed only for FLC pitch guidance.
+
+**PMDG 737:** Uses the installed NG3 SDK's direct MCP events and reads the vendor data block back. TITLE can omit “PMDG”, so detection combines the 737 title with active PMDG instrument evidence or validated SDK telemetry. With **Altitude** and **Auto vertical** checked, and CMD A or B already engaged, the app requests V/S when the height error exceeds 150 ft, verifies the V/S annunciation, and updates bounded V/S. The aircraft's normal altitude capture may replace V/S near the selected altitude. The app re-enters V/S when a new correction is needed. It does not toggle CMD or autothrottle arm. This build uses V/S, not automatic LVL CHG selection. PMDG selected altitude is capped at 41,000 ft.
+
+The installed PMDG configuration was backed up and `[SDK] EnableDataBroadcast=1` added to `737_Options.ini`. Vendor readback is now present in the loaded flight, so no reload is required for the current build. **Engagement stays unavailable while PMDG readback is missing.** Other PMDG families need their own SDK adapter; the implemented vendor adapter is for the 737.
+
+**Standard aircraft:** Uses documented SimConnect selected-speed/Mach, heading, altitude and V/S events. Selected values are read back and a write that is not confirmed within five seconds stops outputs. For optional V/S output, enable the aircraft's V/S mode yourself first. Standard events are implemented, but individual stock aircraft and third-party avionics have not all been flight-tested. Custom systems may ignore these events; the app reports unconfirmed commands rather than claiming universal compatibility.
+
+## Multiplayer filtering and guidance
+
+**Smoothing samples** chooses 5–30 recent accepted positions, default **10**, normally about one observation per second. Linear regression smooths position, velocity, track and vertical speed. Higher values reduce noise but delay the response to real manoeuvres. Guidance uses the fitted position and track, not a single raw point or aircraft nose heading.
+
+Repeated frozen coordinates, sudden horizontal or vertical jumps, and unexpected deviations from the estimated trajectory are quarantined. Four consistent moving observations can establish a corrected trajectory without calculating velocity across the jump. During a brief anomaly or traffic gap, active following enters **DATA HOLD**, retaining the last MCP values and sending no new commands. If usable motion does not recover within five seconds, following stops. Recovery from a stopped state requires a new engagement. A returned `isOnGround` flag is not trusted; MSFS reported it true throughout a confirmed multiplayer climb.
+
+Offsets rotate with target ground track. Ahead of the slot, guidance reduces speed and follows the target's direction with limited lateral correction; it does not reverse toward the point behind. Relative-speed look-ahead starts matching speed before an overtake completes. Desired ground velocity is converted to magnetic heading and IAS/Mach using own wind estimate, air pressure and temperature. Traffic altitude is supplied in metres by the installed MSFS traffic SDK; own indicated-versus-world altitude provides the local correction for the MCP reference. Independent target vertical accuracy remains unverified.
+
+Speed and heading selectors receive the filtered guidance target on the next one-second control cycle after confirmation of the previous write. Altitude starts from current indicated altitude and changes by up to 200 ft/second; V/S starts from current flight V/S and changes by up to 200 ft/min per second. The vertical controller levels its requested V/S when a climb/descent would worsen a configured speed-limit excursion. These are experimental tuning values, not guarantees of formation accuracy or full stall/overspeed protection.
+
+The follower requires valid own/target data, unpaused simulation at 1× speed, and own aircraft above 500 ft AGL. It is not an automatic takeoff, landing, terrain-avoidance or collision-avoidance system. **STOP retains the last selected values and existing aircraft modes**; it does not disconnect the aircraft's autopilot or restore an old flight plan. A short renewable bridge lease keeps tracking running while the app is alive and expires within 30 seconds if the process disappears. Aircraft control starts only through the app's explicit follow/engage action.
+
+## Validation
+
+The managed suite covers formation geometry, conversions, native PMDG decoding, separate output axes, stale/frozen traffic, position corrections, readback timeouts, stop behavior, ID selection, name matching/fix expiry, prompt selector changes, sustained turns across north, column sorting and settings changes during active following. Live observation has verified flight telemetry, intermittent named position data, display-only nameplates, and stock selector transmissions. Sustained formation performance after these changes still requires live validation.
+
+Speed and heading selections now receive the filtered guidance target immediately on the next one-second control cycle, once the previous write is confirmed. This removes the old extra selector lag of 1 knot/second and 2 degrees/second. Altitude and vertical-speed changes remain limited. A consistent turn switches to the latest five position samples; otherwise the selected smoothing window applies. Aircraft acceleration and bank response still depend on the simulator autopilot. Minimum IAS, maximum IAS and maximum Mach remain enforced; a minimum-speed warning explains when slowing enough to hold the requested spacing is impossible within those limits.
+
+Run `--self-test` for offline checks and `--probe --coherent-bridge --seconds 45` for read-only live diagnostics. Logs are in `logs` beside the executable. No probe automatically engages following.
+
+References: [MSFS autopilot events](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/Key_Events/Aircraft_Autopilot_Flight_Assist_Events.htm), [autopilot SimVars](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimVars/Aircraft_SimVars/Aircraft_AutopilotAssistant_Variables.htm), [SimConnect multi-parameter events](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/SimConnect/API_Reference/Events_And_Data/SimConnect_TransmitClientEvent_EX1.htm), and the locally installed `pmdg-aircraft-738/Documentation/SDK/PMDG_NG3_SDK.h`.

@@ -1,0 +1,21 @@
+[Unit]
+Description=WingMan formation relay
+After=network.target
+
+[Service]
+Type=simple
+User=wingman
+Group=wingman
+WorkingDirectory=/opt/wingman
+ExecStart=/opt/wingman/wingman-relay -listen 127.0.0.1:8787 -releases /opt/wingman/releases
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

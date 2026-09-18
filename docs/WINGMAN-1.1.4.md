@@ -1,0 +1,17 @@
+# WingMan 1.1.4
+
+The stock 787-10's A/T indication now uses its actual arm-switch value during normal relay operation. It no longer depends on the optional traffic diagnostics bridge identifying the Working Title instruments. Other aircraft cannot inherit this Boeing-specific value from a previous flight.
+
+Keep on top now uses only the native non-activating Windows call. The WinForms TopMost setter was also activating the window when maintenance ran; this has been removed so focus remains with MSFS.
+
+Adds the **Resume when telemetry returns** switch directly below the follow controls. The preference is stored in the user's Registry settings and defaults to off, preserving existing behavior.
+
+When enabled during an established follow, loss of target data, own-aircraft telemetry, autopilot readback or the relay connection suspends commands and displays **Waiting to resume**. The Follow user switch stays on and can cancel waiting in both normal and compact views. Fresh valid motion from the same lead and valid own-aircraft/autopilot data are required before resuming. The relay's subscription is restored when the same lead reconnects and is sharing again.
+
+The last aircraft autopilot selections remain in place during an outage. This does not disengage the aircraft's autopilot. Switching Follow user off, pressing Escape, disabling automatic resume while waiting, changing aircraft/target/speed mode, or an unconfirmed autopilot command cancels automatic restart. A lead explicitly pausing, landing or stopping sharing still stops following. Merely enabling this setting or launching WingMan normally does not start following.
+
+With **Automatic V/S for height matching** enabled, stock aircraft can remain in normal altitude hold at the requested height. WingMan reselects V/S for a new climb/descent when the height error exceeds 150 ft, a non-zero vertical correction is permitted, and the new altitude selector has moved at least 100 ft in that direction. AP master must already be engaged. A request is sent once and requires mode confirmation within five seconds; unsupported events stop following instead of being repeatedly toggled. PMDG continues using its own SDK V/S button. This does not engage AP master or arm autothrottle.
+
+**Max IAS** and **Max Mach** are on the main screen. The status identifies which limit is restricting speed. Raising the appropriate ceiling keeps automatic spacing and applies without stopping following. For example, at altitude a Max Mach of 0.78 can limit IAS to about 264 kt even with a much higher Max IAS. The precise conversion uses the current atmospheric pressure and aircraft airspeed calibration. Existing custom limits remain in use; review the aircraft redline when raising them. Dynamic aircraft redline limits are research for a future change, not part of this release.
+
+Validation: 204 deterministic checks pass, covering telemetry loss/recovery, cancellation, unchanged target identity, mode prerequisites, unconfirmed commands, stock ALT hold to V/S transitions in both directions, and raising a Mach ceiling while maintaining spacing guidance. Normal and expanded settings layouts were rendered and inspected. A read-only live stock 787 probe confirmed AP master on, altitude hold on and V/S off at level flight; the new V/S activation event still requires in-flight confirmation through the app's readback. The event uses the [documented AP_PANEL_VS_ON command](https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/Key_Events/Aircraft_Autopilot_Flight_Assist_Events.htm).
