@@ -4,7 +4,10 @@ namespace EscortPlane2024;
 
 // Coherent uId is an opaque traffic ID, never a SimConnect Object ID.
 internal sealed record CoherentAircraft(ulong TrafficId, string Name, string Model, double Latitude, double Longitude,
-    double RawAltitude, double Heading, bool IsOnGround, DateTimeOffset SourceTime, DateTimeOffset ReceivedAt);
+    double RawAltitude, double Heading, bool IsOnGround, DateTimeOffset SourceTime, DateTimeOffset ReceivedAt)
+{
+    public double? AboveGroundFeet { get; init; }
+}
 
 internal sealed class CoherentTrafficTracker
 {

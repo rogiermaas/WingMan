@@ -2,11 +2,14 @@ namespace EscortPlane2024;
 
 internal sealed record FormationSettings(double BehindNm = 1, double RightNm = 0, double AboveNm = 0,
     double MinIas = 210, double MaxIas = 320, double MaxMach = 0.78, double MaxVs = 1500,
-    bool Speed = true, bool Heading = true, bool Altitude = true, bool VerticalSpeed = false, int SmoothingSamples = 10)
+    bool Speed = true, bool Heading = true, bool Altitude = true, bool VerticalSpeed = false, int SmoothingSamples = 10,
+    int CircleBelowFeet = 0, double CircleIas = 0)
 {
     public bool Valid => new[] { BehindNm, RightNm, AboveNm, MinIas, MaxIas, MaxMach, MaxVs }.All(double.IsFinite)
-        && BehindNm is >= 0.1 and <= 100 && Math.Abs(RightNm) <= 20 && Math.Abs(AboveNm) <= 5
-        && MinIas >= 40 && MaxIas <= 600 && MinIas < MaxIas && MaxMach is >= 0.2 and <= 0.95 && MaxVs is >= 100 and <= 6000 && SmoothingSamples is >= 5 and <= 30;
+        && BehindNm is >= 0 and <= 100 && Math.Abs(RightNm) <= 20 && Math.Abs(AboveNm) <= 5
+        && MinIas >= 40 && MaxIas <= 600 && MinIas < MaxIas && MaxMach is >= 0.2 and <= 0.95 && MaxVs is >= 100 and <= 6000 && SmoothingSamples is >= 5 and <= 30
+        && (CircleBelowFeet == 0 || CircleBelowFeet is >= 500 and <= 20000 && CircleBelowFeet % 100 == 0)
+        && (CircleIas == 0 || double.IsFinite(CircleIas) && CircleIas is >= 40 and <= 600);
 }
 
 internal sealed record GuidanceSolution(string Mode, double AlongErrorNm, double CrossErrorNm, double VerticalErrorFeet,
@@ -50,13 +53,29 @@ internal sealed partial class GuidanceController
 {
     private string mode = "CAPTURE";
     private DateTimeOffset? settledSince;
-    public void Reset() { mode = "CAPTURE"; settledSince = null; }
+    private bool altitudeOrbit;
+    public void Reset() { mode = "CAPTURE"; settledSince = null; altitudeOrbit = false; }
     public GuidanceSolution Calculate(OwnTelemetry own, FlightTelemetry flight, TargetEstimator target, FormationSettings s, DateTimeOffset now)
     {
+        if (s.CircleBelowFeet > 0 && target.Latest is { } lead && target.TrustedGroundStatus)
+        {
+            var agl = lead.IsOnGround ? 0 : lead.AboveGroundFeet;
+            if (agl == null) throw new InvalidOperationException("Lead height unavailable: update the lead's WingMan or disable altitude circling");
+            if (agl <= s.CircleBelowFeet) altitudeOrbit = true;
+            else if (agl > s.CircleBelowFeet + 100 && target.GroundSpeedKnots is > 40 && target.GroundTrackDegrees != null) altitudeOrbit = false;
+            if (altitudeOrbit)
+            {
+                mode = "CAPTURE"; settledSince = null;
+                // Lead MSL minus AGL gives the terrain elevation beneath the lead.
+                var groundReference = lead with { RawAltitude = lead.RawAltitude - Math.Max(0, agl.Value) * .3048 };
+                return CalculateOrbit(own, flight, groundReference, s, now, s.CircleBelowFeet);
+            }
+        }
+        else altitudeOrbit = false;
         if (target.GroundOrbitTarget is { } ground)
         {
-            Reset();
-            return CalculateOrbit(own, flight, ground, s, now);
+            mode = "CAPTURE"; settledSince = null;
+            return CalculateOrbit(own, flight, ground, s, now, s.CircleBelowFeet > 0 ? s.CircleBelowFeet : null);
         }
         if (!s.Valid || !flight.Valid || target.Latest == null || target.GroundTrackDegrees == null || target.GroundSpeedKnots == null)
             throw new InvalidOperationException("Guidance inputs unavailable");
@@ -104,7 +123,7 @@ internal sealed partial class GuidanceController
         // Calibrate ideal CAS to the aircraft's reported IAS at the current flight condition.
         var calibration = Math.Clamp(own.IndicatedSpeedKnots / Cas(flight.Mach, flight.AmbientPressure), 0.8, 1.2);
         ias *= calibration;
-        var lower = Math.Max(s.MinIas, flight.StallSpeed > 0 ? flight.StallSpeed * 1.3 : s.MinIas);
+        var lower = s.MinIas;
         var machLimitIas = Cas(s.MaxMach, flight.AmbientPressure) * calibration;
         var upper = Math.Min(s.MaxIas, machLimitIas);
         if (lower >= upper) throw new InvalidOperationException("No usable speed range at this altitude; revise limits");
@@ -119,10 +138,17 @@ internal sealed partial class GuidanceController
         var vs = Math.Clamp((target.VerticalSpeedFpm ?? 0) + vertical * 1.5, -s.MaxVs, s.MaxVs);
         return new(mode, along, cross, vertical, gs, limitedIas, limitedMach,
             FormationGeometry.Normalize(headingTrue - magVariation), Math.Clamp(selectedAltitude, 0, 45000), vs,
-            ias < lower - 0.1 ? $"Minimum IAS {lower:F0} kt prevents the requested slowdown; you may overtake."
+            WithSpeedWarning(ias < lower - 0.1 ? $"Your minimum IAS {lower:F0} kt prevents further slowdown; you may overtake."
                 : ias > upper + 0.1 ? (machLimitIas < s.MaxIas
                     ? $"Max Mach {s.MaxMach:F2} limits IAS to {upper:F0} kt; raise Max Mach to allow faster catch-up."
-                    : $"Max IAS {s.MaxIas:F0} kt limits catch-up speed; raise Max IAS to allow faster catch-up.") : "", slot);
+                    : $"Max IAS {s.MaxIas:F0} kt limits catch-up speed; raise Max IAS to allow faster catch-up.") : "", limitedIas, flight), slot);
+    }
+    internal static string WithSpeedWarning(string message, double ias, FlightTelemetry flight)
+    {
+        var reference = flight.StallSpeed * 1.3;
+        return flight.StallSpeed > 0 && ias < reference - .1
+            ? string.Join(" · ", new[] { message, $"IAS {ias:F0} kt is below the design-speed reference ({reference:F0} kt). Your limits apply; check flaps and weight." }.Where(x => x.Length > 0))
+            : message;
     }
     internal static double CatchUpCorrection(double slotErrorNm, double closingKnots)
     {

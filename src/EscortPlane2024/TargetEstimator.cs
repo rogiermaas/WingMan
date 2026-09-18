@@ -183,4 +183,27 @@ internal sealed class TargetEstimator(string targetName)
         var id = TargetId; var byId = MatchById;
         Reset(); TargetId = id; MatchById = byId;
     }
+    // A detached guidance model: never refresh the real feed's timestamps or list status.
+    public TargetEstimator Snapshot() => new(Name)
+    {
+        FastTelemetry = FastTelemetry, TrustedGroundStatus = TrustedGroundStatus, TargetId = TargetId, MatchById = MatchById,
+        Latest = Latest, GroundOrbitTarget = GroundOrbitTarget, SmoothedPosition = SmoothedPosition,
+        GroundSpeedKnots = GroundSpeedKnots, GroundTrackDegrees = GroundTrackDegrees, VerticalSpeedFpm = VerticalSpeedFpm
+    };
+    public TargetEstimator ContinueAt(DateTimeOffset now, bool circle)
+    {
+        var copy = Snapshot(); var last = Latest!;
+        var position = SmoothedPosition ?? new(last.Latitude, last.Longitude, last.RawAltitude / .3048);
+        if (!circle)
+        {
+            var seconds = Math.Max(0, (now - last.SourceTime).TotalSeconds);
+            var radians = (GroundTrackDegrees ?? last.Heading) * Math.PI / 180;
+            position = FormationGeometry.Offset(position, (GroundSpeedKnots ?? 0) * seconds / 3600 * Math.Cos(radians),
+                (GroundSpeedKnots ?? 0) * seconds / 3600 * Math.Sin(radians));
+        }
+        // Retain the last altitude rather than inventing an ongoing descent to the ground.
+        copy.Latest = last with { Latitude = position.Latitude, Longitude = position.Longitude, RawAltitude = position.AltitudeFeet * .3048, SourceTime = now };
+        copy.SmoothedPosition = position; copy.VerticalSpeedFpm = 0;
+        return copy;
+    }
 }

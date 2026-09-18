@@ -14,8 +14,10 @@ internal sealed record RelayTelemetry(long Sequence, long SampleTimeMs, double S
     string Model, bool Paused, bool OnGround, double SimRate,
     string AircraftType = "", string AircraftModel = "", string Registration = "", string Livery = "")
 {
+    public double? AboveGroundFeet { get; init; }
     public bool Valid => Sequence > 0 && SampleTimeMs > 0 && new[] { SampleAgeMs, Latitude, Longitude, AltitudeFeet,
         GroundSpeedKnots, GroundTrackDegrees, HeadingDegrees, VerticalSpeedFpm, SimRate }.All(double.IsFinite)
+        && (AboveGroundFeet == null || double.IsFinite(AboveGroundFeet.Value) && AboveGroundFeet is >= -1000 and <= 100000)
         && SampleAgeMs is >= 0 and <= 2000 && Math.Abs(Latitude) <= 90 && Math.Abs(Longitude) <= 180
         && AltitudeFeet is >= -2000 and <= 100000 && GroundSpeedKnots is >= 0 and <= 1500
         && GroundTrackDegrees is >= 0 and < 360 && HeadingDegrees is >= 0 and < 360

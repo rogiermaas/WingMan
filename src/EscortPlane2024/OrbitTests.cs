@@ -90,10 +90,10 @@ internal static class OrbitTests
         session = GroundSession(); controller = new(session, log) { Settings = settings, ResumeWhenTelemetryReturns = true };
         controller.Engage(now); controller.Tick(now); sent = session.Outputs.Count;
         session.Refresh(now.AddSeconds(3), 0, false); controller.Tick(now.AddSeconds(3));
-        check(controller.Active && controller.Status.StartsWith("DATA HOLD") && session.Outputs.Count == sent,
-            "Stale ground telemetry freezes circle outputs just like airborne following");
+        check(controller.Active && controller.UsingRememberedData && controller.Preview?.Mode == "CIRCLE" && session.Outputs.Count > sent,
+            "Stale lead telemetry continues circling the remembered ground position");
         session.Refresh(now.AddSeconds(6), 0, false); controller.Tick(now.AddSeconds(6));
-        check(!controller.Active && controller.WaitingForTelemetry, "Extended ground telemetry loss waits only when automatic resume is enabled");
+        check(controller.Active && !controller.WaitingForTelemetry && controller.UsingRememberedData, "Extended lead telemetry loss preserves an established circle");
         session.Focus.ResetMotion(); session.Refresh(now.AddSeconds(7), 0, false); session.Focus.Observe(Ground(now.AddSeconds(7))); controller.Tick(now.AddSeconds(7));
         check(controller.Active && controller.Preview?.Mode == "CIRCLE", "Fresh stationary ground telemetry can automatically resume the same circle");
         session = GroundSession(); session.Flight = session.Flight! with { OnGround = 1 }; controller = new(session, log) { Settings = settings }; controller.Engage(now);

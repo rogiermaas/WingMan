@@ -1,0 +1,11 @@
+# WingMan 1.1.7
+
+- Pilot minimum IAS now governs following. The 1.3 × design-stall-speed estimate is advisory only; it cannot raise the pilot's minimum or invalidate a lower selected range. A **Circle IAS** selector appears while circling and allows a lower speed independently of the following minimum; pilots configure flaps themselves. Until a circle speed is chosen, it defaults to minimum + 10 kt. Max IAS/Mach caps apply in both modes. The calculated circle radius shrinks as actual speed decreases.
+- Behind NM accepts 0.0 for abeam formation with lateral/vertical offsets. Zero circle radius selects the computed minimum for speed and wind.
+- Optional **Circle below lead height** uses 100 ft steps from 500 to 20,000 ft AGL. At/below the threshold, fly a clockwise circle at that height above the ground beneath the lead. Above NM is temporarily ignored. Above threshold + 100 ft, established airborne motion restores following. Requires optional AGL telemetry sent by version 1.1.7; older clients remain compatible when this setting is off.
+- Established WingMan following continues through missing lead data. Airborne position is projected from the last accepted ground course and speed while holding the last altitude. Circling holds its last centre and ground reference. Status labels show remembered data and its age; real list entries remain stale. Fresh, accepted lead motion replaces the estimate automatically. Stop, lead sharing revocation, aircraft/mode changes and own-telemetry failures retain their existing behavior. Memory is session-only and does not permit starting from stale data.
+- Smaller buttons, less padding, aligned list heading/legend, main-screen minimum speed, live effective IAS/Mach cap, side-by-side automatic V/S and update options, and preserved diagnostics scrolling.
+
+IAS and Mach caps remain independent. Their equivalent speeds depend on atmospheric pressure; changing one does not rewrite the other. The lower equivalent limit applies.
+
+This remains simulator guidance, not automatic landing. Own aircraft below 500 ft AGL stops following. AGL beneath the lead does not provide terrain clearance around an entire circle. Predicted positions cannot account for unreported turns or speed changes. Windows binaries remain unsigned for Authenticode.

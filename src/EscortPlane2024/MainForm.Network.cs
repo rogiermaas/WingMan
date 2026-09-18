@@ -152,7 +152,7 @@ internal sealed partial class MainForm
                     if (id == relayLead && confirmedLead == id)
                     {
                         if (sim.Focus.TargetId != RelayTracks.Contact(id).TrackingId) { sim.SelectTarget(members.GetValueOrDefault(id)?.Name ?? id, RelayTracks.Contact(id).TrackingId, true); sim.Focus.FastTelemetry = true; sim.Focus.TrustedGroundStatus = true; }
-                        sim.Focus.Observe(new(RelayTracks.Contact(id).TrackingId, sim.Focus.Name, t.Model, t.Latitude, t.Longitude, t.AltitudeFeet * .3048, t.HeadingDegrees, t.OnGround, at, received));
+                        sim.Focus.Observe(new(RelayTracks.Contact(id).TrackingId, sim.Focus.Name, t.Model, t.Latitude, t.Longitude, t.AltitudeFeet * .3048, t.HeadingDegrees, t.OnGround, at, received) { AboveGroundFeet = t.AboveGroundFeet });
                     }
                     break;
                 case "unavailable":
@@ -186,13 +186,14 @@ internal sealed partial class MainForm
                         ownData.Position.Latitude, ownData.Position.Longitude, ownData.Position.AltitudeFeet, ownData.GroundSpeedKnots,
                         FormationGeometry.Normalize(ownData.TrueTrack), FormationGeometry.Normalize(flight.TrueHeading), ownData.VerticalSpeedFpm,
                         LimitUtf8(sim.OwnTitle, 160), false, flight.OnGround != 0, flight.SimRate,
-                        LimitUtf8(sim.OwnDetails[0] ?? "", 160), LimitUtf8(sim.OwnDetails[1] ?? "", 160), LimitUtf8(sim.OwnDetails[2] ?? "", 160), LimitUtf8(sim.OwnDetails[3] ?? "", 160));
+                        LimitUtf8(sim.OwnDetails[0] ?? "", 160), LimitUtf8(sim.OwnDetails[1] ?? "", 160), LimitUtf8(sim.OwnDetails[2] ?? "", 160), LimitUtf8(sim.OwnDetails[3] ?? "", 160))
+                        { AboveGroundFeet = double.IsFinite(flight.AboveGround) ? flight.AboveGround : null };
                     if (telemetry.Valid) { relay.Send(new { type = confirmedShare ? "telemetry" : "observer", telemetry }); lastPublished = ownData.ReceivedAt; }
                 }
             }
             else if (!sendingUnavailable) { relay.Send(new { type = "unavailable" }); sendingUnavailable = true; }
         }
-        if (sim.Follower.WaitingForTelemetry && relay.Connected && confirmedLead != relayLead && relayLead.Length > 0
+        if ((sim.Follower.WaitingForTelemetry || sim.Follower.UsingRememberedData) && relay.Connected && confirmedLead != relayLead && relayLead.Length > 0
             && members.TryGetValue(relayLead, out var returningLead) && returningLead.Online && returningLead.Share && now >= nextLeadReacquire)
         {
             nextLeadReacquire = now.AddSeconds(2);
@@ -204,7 +205,7 @@ internal sealed partial class MainForm
         if (resumeAfterUpdate is { } resume && now < resume.Expires && relay.Connected && sim.Connected && sim.OwnTitle == resume.Aircraft
             && networkOptions.Server == resume.Server && relay.Room == resume.Room && members.TryGetValue(resume.Lead, out var lead) && lead.Online && lead.Share
             && relayTracks.Get(resume.Lead) is { } freshLead && now - freshLead.At < TimeSpan.FromSeconds(2)
-            && (!freshLead.Telemetry.OnGround || vertical.Value > 0))
+            && (!freshLead.Telemetry.OnGround || vertical.Value > 0 || circleBelow.Checked))
         { resumeAfterUpdate = null; BeginRelayFollow(resume.Lead); }
         if (now >= nextUpdateCheck && !updateBusy && !updateLaunched && networkOptions.Server.Length > 0)
         { nextUpdateCheck = now.AddMinutes(5); _ = CheckForUpdates(false); }
@@ -213,12 +214,22 @@ internal sealed partial class MainForm
     {
         if (!networkLoaded) return; var now = DateTimeOffset.UtcNow;
         var leadName = members.GetValueOrDefault(relayLead)?.Name ?? sim.Focus.Name;
-        var circling = sim.Focus.GroundOrbitTarget != null;
+        var circling = sim.Follower.Preview?.Mode == "CIRCLE";
+        circleSpeedRow.Visible = circling;
+        if (circling && !customCircleIas)
+        {
+            settingsLoading = true;
+            try { circleIas.Value = Math.Clamp(Math.Round((decimal)(sim.Follower.Preview?.Ias ?? (double)minIas.Value + 10), MidpointRounding.AwayFromZero), circleIas.Minimum, circleIas.Maximum); }
+            finally { settingsLoading = false; }
+        }
         SetText(spacingLabel, circling ? "Radius NM" : "Behind NM");
         lateral.Enabled = !circling;
-        SetText(compactStatus, sim.Follower.Active ? (circling ? "Circling " : "Following ") + leadName : followSelectedAt != null ? "Preparing to follow " + leadName : sim.Follower.Status);
+        vertical.Enabled = !(circling && circleBelow.Checked);
+        SetText(compactStatus, sim.Follower.Active ? (circling ? "Circling " : "Following ") + leadName
+            + (sim.Follower.UsingRememberedData ? $" · last data {sim.Follower.RememberedAgeSeconds(now):F0}s ago" : "")
+            : followSelectedAt != null ? "Preparing to follow " + leadName : sim.Follower.Status);
         SetText(compactSpacing, circling
-            ? $"Radius {sim.Follower.Preview?.OrbitRadiusNm ?? (double)behind.Value:0.0} · Above {vertical.Value:0.0} NM"
+            ? $"Radius {sim.Follower.Preview?.OrbitRadiusNm ?? (double)behind.Value:0.0} · " + (circleBelow.Checked ? $"{circleHeight.Value:F0} ft above lead ground" : $"Above {vertical.Value:0.0} NM")
             : $"Behind {behind.Value:0.0} · Right {lateral.Value:0.0} · Above {vertical.Value:0.0} NM");
         compactStatus.ForeColor = sim.Follower.Active ? Color.DarkGreen : Color.DarkSlateGray;
         if (updateLaunched && updateDirectory != null && File.Exists(Path.Combine(updateDirectory, "update-error.txt")))

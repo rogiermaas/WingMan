@@ -14,9 +14,13 @@ internal sealed partial class MainForm : Form
     private readonly Button connect = Button("Connect to MSFS"), feed = Button("Find nearby aircraft"), select = Button("Follow selected aircraft"), watch = Button("Find this name"), engage = Button("Start following"), stop = Button("Stop following");
     private readonly ToolTip buttonHelp = new() { AutoPopDelay = 15000 };
     private readonly TextBox name = new() { Text = TargetSearch.FocusName, Width = 160 };
-    private readonly NumericUpDown radius = Number(1, 100, 20, 1), behind = Number(0.1m, 100, 1, 0.1m), lateral = Number(-20, 20, 0, 0.1m), vertical = Number(-5, 5, 0, 0.1m);
+    private readonly NumericUpDown radius = Number(1, 100, 20, 1), behind = Number(0, 100, 1, 0.1m), lateral = Number(-20, 20, 0, 0.1m), vertical = Number(-5, 5, 0, 0.1m);
     private readonly NumericUpDown minIas = Number(40, 599, 210, 1), maxIas = Number(41, 600, 320, 1), maxMach = Number(0.2m, 0.95m, 0.78m, 0.01m), maxVs = Number(100, 6000, 1500, 100);
     private readonly NumericUpDown smoothing = Number(5, 30, 10, 1);
+    private readonly CheckBox circleBelow = Check("Circle below lead height", false);
+    private readonly NumericUpDown circleHeight = Number(500, 20000, 1000, 100);
+    private readonly NumericUpDown circleIas = Number(40, 600, 220, 1);
+    private bool customCircleIas;
     private readonly NumericUpDown minimumAltitude = Number(0, 60000, 1000, 100);
     private readonly CheckBox speedOutput = Check("Speed", true), headingOutput = Check("Heading", true), altitudeOutput = Check("Altitude", true), vsOutput = Check("Automatic V/S for height matching", true);
     private readonly CheckBox keepOnTop = Check("Keep on top", false);
@@ -48,8 +52,15 @@ internal sealed partial class MainForm : Form
     private string? settingsError;
     private readonly string settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EscortPlane2024", "formation.json");
     private static Label Label(string text = "") => new() { Text = text, AutoSize = true, MaximumSize = new(550, 0), Margin = new(3, 2, 3, 2) };
-    private static void SetText(Control control, string text) { if (control.Text != text) control.Text = text; }
-    private static Button Button(string text) => new() { Text = text, AutoSize = true, Padding = new(4, 1, 4, 1) };
+    private static void SetText(Control control, string text)
+    {
+        if (control.Text == text) return;
+        Control? parent = control.Parent;
+        while (parent != null && parent is not StableScrollPanel) parent = parent.Parent;
+        using var scroll = (parent as StableScrollPanel)?.PreserveScroll();
+        control.Text = text;
+    }
+    private static Button Button(string text) => new() { Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new(3, 0, 3, 0), Margin = new(3, 1, 3, 1) };
     private static CheckBox Check(string text, bool value) => new() { Text = text, Checked = value, AutoSize = true, Margin = new(6, 4, 6, 2) };
     private static NumericUpDown Number(decimal min, decimal max, decimal value, decimal step) => new()
     { Minimum = min, Maximum = max, Value = value, Increment = step, DecimalPlaces = step == 0.01m ? 2 : step < 1 ? 1 : 0, Width = 76, Margin = new(3, 2, 8, 2) };
@@ -136,12 +147,15 @@ internal sealed partial class MainForm : Form
         WindowPinning.Apply(this, keepOnTop.Checked);
         keepOnTop.CheckedChanged += (_, _) => { WindowPinning.Apply(this, keepOnTop.Checked); SaveSettings(); };
         HandleCreated += (_, _) => WindowPinning.Apply(this, keepOnTop.Checked);
-        foreach (var control in new[] { behind, lateral, vertical, minIas, maxIas, maxMach, maxVs, smoothing }) control.ValueChanged += (_, _) =>
+        foreach (var control in new[] { behind, lateral, vertical, minIas, maxIas, maxMach, maxVs, smoothing, circleHeight }) control.ValueChanged += (_, _) =>
         {
             if (!settingsLoading && (control == minIas || control == maxIas)) speedLimitsVersion = AircraftSpeedLimits.Version;
             SettingsChanged();
         };
         foreach (var control in new[] { speedOutput, headingOutput, altitudeOutput, vsOutput }) control.CheckedChanged += (_, _) => SettingsChanged();
+        circleBelow.CheckedChanged += (_, _) => { circleHeight.Enabled = circleBelow.Checked; SettingsChanged(); };
+        circleHeight.Enabled = circleBelow.Checked;
+        circleIas.ValueChanged += (_, _) => { if (settingsLoading) return; customCircleIas = true; SettingsChanged(); };
         connect.Click += (_, _) => Run(() => { if (sim.IsOpen) sim.Disconnect(); else { sim.Connect(); } });
         feed.Click += async (_, _) =>
         {
@@ -224,7 +238,9 @@ internal sealed partial class MainForm : Form
     }
     private FormationSettings Settings() => new((double)behind.Value, (double)lateral.Value, (double)vertical.Value,
         (double)minIas.Value, (double)maxIas.Value, (double)maxMach.Value, (double)maxVs.Value,
-        speedOutput.Checked, headingOutput.Checked, altitudeOutput.Checked, vsOutput.Checked, (int)smoothing.Value);
+        speedOutput.Checked, headingOutput.Checked, altitudeOutput.Checked, vsOutput.Checked, (int)smoothing.Value,
+        circleBelow.Checked ? (int)(Math.Round(circleHeight.Value / 100) * 100) : 0,
+        customCircleIas ? (double)circleIas.Value : 0);
     private void SettingsChanged()
     {
         if (settingsLoading) return;
@@ -384,7 +400,9 @@ internal sealed partial class MainForm : Form
     }
     private void RefreshUi()
     {
+        using var scroll = extraPanel.PreserveScroll();
         RefreshFormationScreen();
+        RefreshSpeedLimitHint();
         var now = DateTimeOffset.UtcNow; var o = sim.Own; var f = sim.Focus; var controller = sim.Follower;
         SetText(connect, sim.IsOpen ? "Disconnect" : "Connect to MSFS");
         SetText(connection, sim.Connected ? $"Connected · {controller.Adapter}" : sim.Status);
@@ -410,9 +428,10 @@ internal sealed partial class MainForm : Form
         engage.BackColor = engage.Enabled ? Color.Honeydew : SystemColors.Control;
         select.Enabled = sim.Connected && wantTraffic && contactCatalog.FirstOrDefault(c => c.Id == selectedContact)?.Fresh(now) == true;
         state.Text = settingsError ?? (followSelectedAt != null ? $"Preparing to follow {f.Name}: {block ?? "ready"}"
-            : controller.Active ? $"{(f.GroundOrbitTarget != null ? "Circling" : "Following")} {f.Name} · {controller.Status}"
+            : controller.Active ? $"{(controller.Preview?.Mode == "CIRCLE" ? "Circling" : "Following")} {f.Name} · {controller.Status}"
             : controller.WaitingForTelemetry ? controller.Status : block ?? controller.Status);
-        state.MaximumSize = new(550, 0); state.ForeColor = controller.Active && !string.IsNullOrEmpty(controller.Preview?.Limit) ? Color.DarkOrange : controller.Active ? Color.DarkGreen : Color.DarkSlateGray;
+        state.MaximumSize = new(610, 62); state.ForeColor = controller.Active && !string.IsNullOrEmpty(controller.Preview?.Limit) ? Color.DarkOrange : controller.Active ? Color.DarkGreen : Color.DarkSlateGray;
+        buttonHelp.SetToolTip(state, state.Text);
         var ap = controller.Readback;
         actual.Text = ap == null ? "Selected-value readback unavailable." : $"Aircraft selectors: {(ap.MachMode ? $"M{ap.Mach:F2}" : $"{ap.Ias:F0} kt")} · HDG {ap.Heading:F0}° · ALT {ap.Altitude:F0} ft · V/S {ap.Vs:F0} ft/min"
             + "\n" + ap.AutothrottleStatus;
@@ -541,6 +560,10 @@ internal sealed partial class MainForm : Form
             minIas.Value = (decimal)s.MinIas; maxIas.Value = (decimal)s.MaxIas; maxMach.Value = (decimal)s.MaxMach; maxVs.Value = (decimal)s.MaxVs;
             speedOutput.Checked = s.Speed; headingOutput.Checked = s.Heading; altitudeOutput.Checked = s.Altitude; vsOutput.Checked = s.VerticalSpeed;
             smoothing.Value = s.SmoothingSamples;
+            circleBelow.Checked = s.CircleBelowFeet > 0;
+            circleHeight.Value = s.CircleBelowFeet > 0 ? s.CircleBelowFeet : 1000;
+            customCircleIas = s.CircleIas > 0;
+            if (customCircleIas) circleIas.Value = (decimal)s.CircleIas;
             if (!saved.TargetById && !string.IsNullOrWhiteSpace(saved.Target)) { name.Text = saved.Target; sim.SelectTarget(saved.Target); }
         }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentOutOfRangeException) { log.Write("settings_load_error", new { ex.Message }); }

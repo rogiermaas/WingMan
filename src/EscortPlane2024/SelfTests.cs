@@ -99,6 +99,7 @@ internal static class SelfTests
         VerticalModeTests.Run(log, Check);
         CatchUpTests.Run(log, Check);
         OrbitTests.Run(log, Check);
+        ContinuationTests.Run(log, Check);
         NearbyAircraftTests.Run(Check);
         WindowPinningTests.Run(Check);
         TrafficMapTests.Run(Check);

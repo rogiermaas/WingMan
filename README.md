@@ -42,7 +42,7 @@ if ($testRun.ExitCode -ne 0) { throw 'WingMan self-tests failed' }
 
 Outputs: `dist/WingMan/WingMan.exe`, `dist/WingMan.msi`, and `dist/WingMan-server-almalinux8-x64.tar.gz`. The self-contained executable needs no separate .NET installation. `-SkipPublish` does not require the production update-signing key. Forks must configure their own service and update trust key before distributing automatic updates.
 
-[GitHub Actions](https://github.com/rogiermaas/WingMan/actions) builds the Windows application/installer and Linux relay, runs the offline client and relay tests, and retains build artifacts. Production website releases are separate from CI artifacts. Version 1.1.6 passed 249 client checks. See [release notes](docs/WINGMAN-1.1.6.md).
+[GitHub Actions](https://github.com/rogiermaas/WingMan/actions) builds the Windows application/installer and Linux relay, runs the offline client and relay tests, and retains build artifacts. Production website releases are separate from CI artifacts. Version 1.1.7 adds pilot-controlled minimum speed, altitude circling and remembered lead guidance. See [release notes](docs/WINGMAN-1.1.7.md).
 
 ## Project and data
 

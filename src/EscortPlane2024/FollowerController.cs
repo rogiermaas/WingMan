@@ -23,6 +23,20 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
         }
     }
     private DateTimeOffset? verticalModeRequested;
+    private TargetEstimator? rememberedTarget;
+    private bool rememberedCircle;
+    public bool UsingRememberedData { get; private set; }
+    public double RememberedAgeSeconds(DateTimeOffset now) => rememberedTarget?.Latest is { } t ? Math.Max(0, (now - t.SourceTime).TotalSeconds) : 0;
+    private TargetEstimator GuidanceTarget(DateTimeOffset now)
+    {
+        var live = sim.Focus;
+        var usable = live.Latest is { } t && (now - t.SourceTime).TotalSeconds is >= -1 and <= 2 && live.LastIssue == null
+            && (live.GroundOrbitTarget != null || live.GroundSpeedKnots is > 40 && live.GroundTrackDegrees != null
+                || Settings.CircleBelowFeet > 0 && t.AboveGroundFeet <= Settings.CircleBelowFeet);
+        UsingRememberedData = Active && !usable && rememberedTarget != null
+            && sim.OwnTitle == engagedAircraft && live.TargetId == engagedTarget && live.Name == engagedTargetName;
+        return UsingRememberedData ? rememberedTarget!.ContinueAt(now, rememberedCircle) : live;
+    }
     public FormationSettings Settings { get; set; } = new();
     public bool ApplySettings(FormationSettings settings)
     {
@@ -76,6 +90,7 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
     }
     public string? DataBlockReason(DateTimeOffset now)
     {
+        var focus = GuidanceTarget(now);
         if (!sim.Connected || sim.Own == null || sim.Flight == null) return "Waiting for own-aircraft telemetry";
         if (sim.Paused || sim.Flight.SimRate != 1) return "Requires unpaused flight at 1× simulation rate";
         if (!Settings.Valid || !(Settings.Speed || Settings.Heading || Settings.Altitude)) return "Choose outputs and valid limits";
@@ -93,14 +108,18 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
             (sim.Own.IndicatedSpeedKnots, "indicated airspeed"), (sim.Own.VerticalSpeedFpm, "vertical speed") })
             if (!double.IsFinite(value)) return $"Waiting for valid {name} from MSFS";
         if (sim.Own.IndicatedSpeedKnots < 20) return $"Following requires indicated airspeed of at least 20 kt (currently {sim.Own.IndicatedSpeedKnots:F0} kt)";
-        if (sim.Focus.Latest == null || (now - sim.Focus.Latest.SourceTime).TotalSeconds is < -1 or > 2) return "Target data delayed or unavailable";
-        if (sim.Focus.LastIssue != null) return "Filtering multiplayer position anomaly";
-        if (sim.Focus.GroundOrbitTarget != null)
+        if (focus.Latest == null || (now - focus.Latest.SourceTime).TotalSeconds is < -1 or > 2) return "Target data delayed or unavailable";
+        if (focus.LastIssue != null) return "Filtering multiplayer position anomaly";
+        if (Settings.CircleBelowFeet > 0 && !focus.TrustedGroundStatus)
+            return "Altitude circling requires height data from a WingMan lead";
+        if (Settings.CircleBelowFeet > 0 && !focus.Latest.IsOnGround && focus.Latest.AboveGroundFeet == null)
+            return "Lead height unavailable: update the lead's WingMan or disable altitude circling";
+        if (focus.GroundOrbitTarget != null || Settings.CircleBelowFeet > 0 && focus.Latest.AboveGroundFeet <= Settings.CircleBelowFeet + 100)
         {
-            if (Settings.AboveNm <= 0) return "Lead is on the ground: set Above NM to a positive value to circle";
+            if (Settings.CircleBelowFeet == 0 && Settings.AboveNm <= 0) return "Lead is on the ground: set Above NM to a positive value to circle";
         }
-        else if (sim.Focus.GroundSpeedKnots is not > 40 || sim.Focus.GroundTrackDegrees == null) return "Acquiring target flight motion";
-        if (sim.Own.Position.DistanceNm(new(sim.Focus.Latest.Latitude, sim.Focus.Latest.Longitude, 0)) > 100) return "Target beyond 100 NM";
+        else if (focus.GroundSpeedKnots is not > 40 || focus.GroundTrackDegrees == null) return "Acquiring target flight motion";
+        if (sim.Own.Position.DistanceNm(new(focus.Latest.Latitude, focus.Latest.Longitude, 0)) > 100) return "Target beyond 100 NM";
         return null;
     }
     public void Engage(DateTimeOffset now)
@@ -108,6 +127,7 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
         var reason = BlockReason(now);
         if (reason != null) { Status = reason; log.Write("follower_engage_blocked", new { reason }); return; }
         guidance.Reset(); pending.Clear(); verticalModeRequested = null; lastTick = now.AddSeconds(-1);
+        rememberedTarget = null; UsingRememberedData = false;
         engagedAircraft = sim.OwnTitle; engagedMach = Readback!.MachMode;
         engagedTarget = sim.Focus.TargetId; engagedTargetName = sim.Focus.Name; WaitingForTelemetry = false;
         initial.Clear();
@@ -120,9 +140,12 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
     {
         if (Active) log.Write("follower_stopped", new { reason, policy = "No further commands; last selected values and pilot modes retained" });
         Active = false; WaitingForTelemetry = false; pending.Clear(); initial.Clear(); verticalModeRequested = null; Status = reason;
+        rememberedTarget = null; UsingRememberedData = false;
     }
     public void TelemetryLost(string reason)
     {
+        if (Active && rememberedTarget != null && (reason.StartsWith("Lead ") || reason.StartsWith("WingMan ")))
+        { UsingRememberedData = true; Status = "Continuing with last lead data: " + reason; return; }
         var resume = ResumeWhenTelemetryReturns && (Active || WaitingForTelemetry);
         Stop(reason);
         if (!resume) return;
@@ -133,7 +156,8 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
     private bool TelemetryUnavailable(DateTimeOffset now) => !sim.Connected || sim.Own == null || sim.Flight == null
         || now - sim.Own.ReceivedAt > TimeSpan.FromSeconds(2) || now - sim.Flight.ReceivedAt > TimeSpan.FromSeconds(2)
         || sim.Focus.Latest == null || (now - sim.Focus.Latest.SourceTime).TotalSeconds is < -1 or > 2
-        || sim.Focus.LastIssue != null || (sim.Focus.GroundOrbitTarget == null && (sim.Focus.GroundSpeedKnots == null || sim.Focus.GroundTrackDegrees == null));
+        || sim.Focus.LastIssue != null || (sim.Focus.GroundOrbitTarget == null && !(Settings.CircleBelowFeet > 0 && sim.Focus.Latest.AboveGroundFeet <= Settings.CircleBelowFeet)
+            && (sim.Focus.GroundSpeedKnots == null || sim.Focus.GroundTrackDegrees == null));
     public void Tick(DateTimeOffset now)
     {
         if (now - lastTick < TimeSpan.FromSeconds(sim.Focus.FastTelemetry ? 0.2 : 1)) return;
@@ -152,8 +176,9 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
             log.Write("follower_resumed_after_telemetry", new { target = engagedTarget, name = engagedTargetName });
         }
         // Brief server anomalies freeze outputs. No extrapolated commands, no abrupt slowdown from frozen coordinates.
+        var guidanceTarget = GuidanceTarget(now);
         var targetAge = sim.Focus.Latest == null ? double.PositiveInfinity : (now - sim.Focus.Latest.SourceTime).TotalSeconds;
-        if (Active && sim.Connected && !sim.Paused && sim.Own != null && sim.Flight is { SimRate: 1 }
+        if (!UsingRememberedData && Active && sim.Connected && !sim.Paused && sim.Own != null && sim.Flight is { SimRate: 1 }
             && now - sim.Own.ReceivedAt < TimeSpan.FromSeconds(2) && now - sim.Flight.ReceivedAt < TimeSpan.FromSeconds(2)
             && targetAge <= 5 && (targetAge > 2 || sim.Focus.LastIssue != null))
         {
@@ -163,8 +188,15 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
         }
         var reason = DataBlockReason(now);
         if (reason != null) { Preview = null; if (Active) { if (TelemetryUnavailable(now)) TelemetryLost(reason); else Stop(reason); } return; }
-        try { Preview = guidance.Calculate(sim.Own!, sim.Flight!, sim.Focus, Settings, now); }
+        try { Preview = guidance.Calculate(sim.Own!, sim.Flight!, guidanceTarget, Settings, now); }
         catch (InvalidOperationException ex) { Preview = null; if (Active) Stop(ex.Message); else Status = ex.Message; return; }
+        if (Active && !UsingRememberedData && sim.Focus.TrustedGroundStatus)
+        { rememberedTarget = sim.Focus.Snapshot(); rememberedCircle = Preview.Mode == "CIRCLE"; }
+        if (UsingRememberedData)
+        {
+            var memory = $"LAST KNOWN DATA · {RememberedAgeSeconds(now):F0}s old · " + (rememberedCircle ? "holding circle centre" : "projecting last course/speed; altitude held");
+            Preview = Preview with { Limit = string.Join(" · ", new[] { memory, Preview.Limit }.Where(x => x.Length > 0)) };
+        }
         if (IsPmdg && Preview.AltitudeFeet > 41000)
         {
             var error = 41000 - sim.Flight!.IndicatedAltitude;
@@ -174,11 +206,12 @@ internal sealed class FollowerController(IFollowerSession sim, Diagnostics log)
         }
         if (Settings.VerticalSpeed && sim.Own is { } air && sim.Flight is { } flight)
         {
-            if ((air.IndicatedSpeedKnots < Settings.MinIas + 5 && Preview.VerticalSpeedFpm > 0)
+            var climbFloor = Preview.Mode == "CIRCLE" && Settings.CircleIas > 0 ? Math.Min(Settings.MinIas + 5, Preview.Ias - 5) : Settings.MinIas + 5;
+            if ((air.IndicatedSpeedKnots < climbFloor && Preview.VerticalSpeedFpm > 0)
                 || ((air.IndicatedSpeedKnots > Settings.MaxIas - 5 || flight.Mach > Settings.MaxMach) && Preview.VerticalSpeedFpm < 0))
             {
                 var protection = Preview.VerticalSpeedFpm > 0
-                    ? $"Climb paused: IAS {air.IndicatedSpeedKnots:F0} kt is below {Settings.MinIas + 5:F0} kt; waiting for speed"
+                    ? $"Climb paused: IAS {air.IndicatedSpeedKnots:F0} kt is below {climbFloor:F0} kt; waiting for speed"
                     : "Descent paused to protect the configured maximum speed";
                 Preview = Preview with { VerticalSpeedFpm = 0, Limit = string.Join(" · ", new[] { Preview.Limit, protection }.Where(x => x.Length > 0)) };
             }

@@ -3,17 +3,18 @@ namespace EscortPlane2024;
 internal sealed partial class GuidanceController
 {
     private static GuidanceSolution CalculateOrbit(OwnTelemetry own, FlightTelemetry flight,
-        CoherentAircraft ground, FormationSettings s, DateTimeOffset now)
+        CoherentAircraft ground, FormationSettings s, DateTimeOffset now, double? circleHeightFeet = null)
     {
         if (!s.Valid || !flight.Valid) throw new InvalidOperationException("Guidance inputs unavailable");
-        if (s.AboveNm <= 0) throw new InvalidOperationException("Lead is on the ground: set Above NM to a positive value to circle");
+        if (circleHeightFeet == null && s.AboveNm <= 0) throw new InvalidOperationException("Lead is on the ground: set Above NM to a positive value to circle");
         var calibration = Math.Clamp(own.IndicatedSpeedKnots / Cas(flight.Mach, flight.AmbientPressure), .8, 1.2);
-        var lower = Math.Max(s.MinIas, flight.StallSpeed > 0 ? flight.StallSpeed * 1.3 : s.MinIas);
+        var lower = s.CircleIas > 0 ? 40 : s.MinIas;
         var upper = Math.Min(s.MaxIas, Cas(s.MaxMach, flight.AmbientPressure) * calibration);
         if (lower >= upper) throw new InvalidOperationException("No usable speed range at this altitude; revise limits");
         // A parked lead has no airspeed to match. Keep a small margin above the
         // minimum so ordinary speed fluctuation does not inhibit height matching.
-        var orbitIas = Math.Min(lower + 10, upper);
+        var requestedIas = s.CircleIas > 0 ? s.CircleIas : lower + 10;
+        var orbitIas = Math.Min(requestedIas, upper);
         var mach = MachFromCas(orbitIas / calibration, flight.AmbientPressure);
         var soundKnots = Math.Sqrt(1.4 * 287.05287 * flight.AmbientTemperature) / (1852.0 / 3600);
         var tas = mach * soundKnots;
@@ -47,13 +48,16 @@ internal sealed partial class GuidanceController
         var crosswind = -windNorth * Math.Sin(cr) + windEast * Math.Cos(cr);
         var trueHeading = course + Math.Asin(Math.Clamp(-crosswind / tas, -1, 1)) * 180 / Math.PI;
         var gs = Math.Sqrt(Math.Max(0, tas * tas - crosswind * crosswind)) + windNorth * Math.Cos(cr) + windEast * Math.Sin(cr);
-        var slot = FormationGeometry.Offset(center, radius * Math.Cos(radial), radius * Math.Sin(radial), s.AboveNm * FormationGeometry.FeetPerNm);
+        var slot = FormationGeometry.Offset(center, radius * Math.Cos(radial), radius * Math.Sin(radial), circleHeightFeet ?? s.AboveNm * FormationGeometry.FeetPerNm);
         var vertical = slot.AltitudeFeet - ownPosition.AltitudeFeet;
         var selectedAltitude = slot.AltitudeFeet + flight.IndicatedAltitude - own.Position.AltitudeFeet;
         var limit = radius > s.BehindNm + .01
             ? $"Circling clockwise at {radius:F1} NM radius (requested {s.BehindNm:F1}); widened for speed/wind."
             : $"Circling clockwise at {radius:F1} NM radius.";
-        if (s.RightNm != 0) limit += " Right offset resumes after takeoff.";
+        if (circleHeightFeet != null) limit += $" Holding {circleHeightFeet:F0} ft above the lead's ground; follow resumes above {s.CircleBelowFeet + 100} ft AGL.";
+        if (s.RightNm != 0) limit += " Right offset resumes when following.";
+        if (requestedIas > upper + .1) limit += $" Circle IAS {requestedIas:F0} kt is capped at {upper:F0} kt by your IAS/Mach limits.";
+        limit = WithSpeedWarning(limit, orbitIas, flight);
         return new("CIRCLE", radialError, 0, vertical, gs, orbitIas, mach,
             FormationGeometry.Normalize(trueHeading - FormationGeometry.Angle(flight.TrueHeading - flight.MagneticHeading)),
             Math.Clamp(selectedAltitude, 0, 45000), Math.Clamp(vertical * 1.5, -s.MaxVs, s.MaxVs), limit, slot)

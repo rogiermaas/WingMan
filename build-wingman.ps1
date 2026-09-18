@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '1.1.6',
+    [string]$Version = '1.1.7',
     [string]$SigningKey = (Join-Path $env:LOCALAPPDATA 'WingManPublisher\update-private.pem'),
     [switch]$SkipPublish
 )

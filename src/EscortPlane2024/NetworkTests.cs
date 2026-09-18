@@ -13,6 +13,11 @@ internal static class NetworkTests
         var sample = new RelayTelemetry(1, now.ToUnixTimeMilliseconds(), 0, 52, 5, 10000, 250, 90, 95, 0, "Boeing 787", false, false, 1,
             "Boeing", "B78X", "PH-TEST", "Test livery");
         check(tracks.Accept(id, "Lead", sample, now, now), "Relay accepts fresh GPS telemetry with aircraft details");
+        var agl = sample with { AboveGroundFeet = 800 };
+        check(JsonSerializer.Deserialize<RelayTelemetry>(JsonSerializer.Serialize(agl, RelayClient.Json), RelayClient.Json)?.AboveGroundFeet == 800
+            && sample.AboveGroundFeet == null && sample.Valid, "Optional AGL round trips while older telemetry remains compatible");
+        check(!(sample with { AboveGroundFeet = double.NaN }).Valid && !(sample with { AboveGroundFeet = -2000 }).Valid,
+            "Invalid lead height cannot enter circling guidance");
         check(!tracks.Accept(id, "Lead", sample, now, now), "Relay rejects duplicate sequences");
         check(!tracks.Accept(id, "Lead", sample with { Sequence = 2, SampleTimeMs = sample.SampleTimeMs + 1 }, now.AddSeconds(-3), now), "Delayed network positions cannot become fresh");
         check(!tracks.Accept(id, "Lead", sample with { Sequence = 2, SampleTimeMs = sample.SampleTimeMs + 1, Paused = true }, now.AddMilliseconds(1), now), "Paused leads cannot update a live track");

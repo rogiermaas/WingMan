@@ -9,7 +9,7 @@
     <AssemblyName>WingMan</AssemblyName>
     <Product>WingMan</Product>
     <ApplicationIcon>../../assets/branding/WingMan.ico</ApplicationIcon>
-    <Version>1.1.6</Version>
+    <Version>1.1.7</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
   <ItemGroup>

@@ -1,6 +1,6 @@
 # Code signing policy and status
 
-WingMan 1.1.6 is currently distributed without Windows Authenticode signatures. Repository owner: [rogiermaas](https://github.com/rogiermaas). No SignPath Foundation approval or certificate has been obtained. Do not treat the cryptographically verified auto-update manifest as a Windows code-signing certificate.
+WingMan 1.1.7 is currently distributed without Windows Authenticode signatures. Repository owner: [rogiermaas](https://github.com/rogiermaas). No SignPath Foundation approval or certificate has been obtained. Do not treat the cryptographically verified auto-update manifest as a Windows code-signing certificate.
 
 ## Free route under consideration
 

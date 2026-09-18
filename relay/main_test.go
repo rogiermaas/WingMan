@@ -69,9 +69,15 @@ func TestFormationAndIsolation(t *testing.T) {
 		t.Fatal("Follow cycle accepted")
 	}
 	sample := testSample(1)
+	height := 800.0
+	sample.AboveGroundFeet = &height
 	a.WriteJSON(message{Type: "telemetry", Telemetry: sample})
-	if readType(t, c, "telemetry")["id"] != fmt.Sprintf("%032x", 1) {
+	forwarded := readType(t, c, "telemetry")
+	if forwarded["id"] != fmt.Sprintf("%032x", 1) {
 		t.Fatal("Wrong pilot identity")
+	}
+	if forwarded["telemetry"].(map[string]any)["aboveGroundFeet"] != height {
+		t.Fatal("Lead AGL lost while forwarding")
 	}
 	other.WriteJSON(message{Type: "ping", Echo: 1})
 	for {
@@ -318,11 +324,11 @@ func TestSignedPublishAndDownloadDuringTelemetry(t *testing.T) {
 }
 
 func TestPublicDiscoveryAfterIdle(t *testing.T) {
-    h := newHub("")
-    h.rooms["PUBLIC"] = &room{members: map[string]*member{}, touched: time.Now().Add(-2*time.Hour)}
-    s := httptest.NewServer(h.routes())
-    defer s.Close()
-    c := connectPublic(t, s.URL, 1, true)
-    c.WriteJSON(message{Type: "ping", Echo: 42})
-    readType(t, c, "pong")
+	h := newHub("")
+	h.rooms["PUBLIC"] = &room{members: map[string]*member{}, touched: time.Now().Add(-2 * time.Hour)}
+	s := httptest.NewServer(h.routes())
+	defer s.Close()
+	c := connectPublic(t, s.URL, 1, true)
+	c.WriteJSON(message{Type: "ping", Echo: 42})
+	readType(t, c, "pong")
 }

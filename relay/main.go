@@ -28,27 +28,31 @@ var identifier = regexp.MustCompile(`^[a-f0-9]{32}$`)
 var codePattern = regexp.MustCompile(`^[A-F0-9]{20}$`)
 
 type telemetry struct {
-	Sequence           int64   `json:"sequence"`
-	SampleTimeMs       int64   `json:"sampleTimeMs"`
-	SampleAgeMs        float64 `json:"sampleAgeMs"`
-	Latitude           float64 `json:"latitude"`
-	Longitude          float64 `json:"longitude"`
-	AltitudeFeet       float64 `json:"altitudeFeet"`
-	GroundSpeedKnots   float64 `json:"groundSpeedKnots"`
-	GroundTrackDegrees float64 `json:"groundTrackDegrees"`
-	HeadingDegrees     float64 `json:"headingDegrees"`
-	VerticalSpeedFpm   float64 `json:"verticalSpeedFpm"`
-	Model              string  `json:"model"`
-	Paused             bool    `json:"paused"`
-	OnGround           bool    `json:"onGround"`
-	SimRate            float64 `json:"simRate"`
-	AircraftType       string  `json:"aircraftType,omitempty"`
-	AircraftModel      string  `json:"aircraftModel,omitempty"`
-	Registration       string  `json:"registration,omitempty"`
-	Livery             string  `json:"livery,omitempty"`
+	Sequence           int64    `json:"sequence"`
+	SampleTimeMs       int64    `json:"sampleTimeMs"`
+	SampleAgeMs        float64  `json:"sampleAgeMs"`
+	Latitude           float64  `json:"latitude"`
+	Longitude          float64  `json:"longitude"`
+	AltitudeFeet       float64  `json:"altitudeFeet"`
+	GroundSpeedKnots   float64  `json:"groundSpeedKnots"`
+	GroundTrackDegrees float64  `json:"groundTrackDegrees"`
+	HeadingDegrees     float64  `json:"headingDegrees"`
+	VerticalSpeedFpm   float64  `json:"verticalSpeedFpm"`
+	Model              string   `json:"model"`
+	Paused             bool     `json:"paused"`
+	OnGround           bool     `json:"onGround"`
+	SimRate            float64  `json:"simRate"`
+	AircraftType       string   `json:"aircraftType,omitempty"`
+	AircraftModel      string   `json:"aircraftModel,omitempty"`
+	Registration       string   `json:"registration,omitempty"`
+	Livery             string   `json:"livery,omitempty"`
+	AboveGroundFeet    *float64 `json:"aboveGroundFeet,omitempty"`
 }
 
 func (t telemetry) valid() bool {
+	if t.AboveGroundFeet != nil && (math.IsNaN(*t.AboveGroundFeet) || math.IsInf(*t.AboveGroundFeet, 0) || *t.AboveGroundFeet < -1000 || *t.AboveGroundFeet > 100000) {
+		return false
+	}
 	for _, s := range []string{t.Model, t.AircraftType, t.AircraftModel, t.Registration, t.Livery} {
 		if len(s) > 160 {
 			return false

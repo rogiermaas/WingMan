@@ -2,7 +2,7 @@ namespace EscortPlane2024;
 
 internal sealed partial class MainForm
 {
-    private readonly Button searchMsfs = Button("Search MSFS aircraft");
+    private readonly Button searchMsfs = Button("Scan MSFS");
     private readonly Dictionary<string, NearbyAircraft> nearbyRows = [];
     private DateTimeOffset nextNearbyUi;
 
@@ -18,7 +18,7 @@ internal sealed partial class MainForm
     private void RefreshNearbyAircraft(DateTimeOffset now)
     {
         searchMsfs.Enabled = sim.Connected || Program.DemoMode;
-        SetText(searchMsfs, wantTraffic ? "Search MSFS again" : "Search MSFS aircraft");
+        SetText(searchMsfs, wantTraffic ? "Scan again" : "Scan MSFS");
         if (now < nextNearbyUi) return;
         nextNearbyUi = now.AddSeconds(1);
         var local = wantTraffic ? TrafficContacts.Build(sim.CoherentTraffic.Aircraft, sim.Traffic.Aircraft, sim.Own?.Position) : [];
